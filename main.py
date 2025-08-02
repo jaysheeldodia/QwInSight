@@ -1,4 +1,4 @@
-from langchain.document_loaders import PyMuPDFLoader
+from langchain_community.document_loaders import PyMuPDFLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Step 1: Load the document

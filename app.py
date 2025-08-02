@@ -1,9 +1,9 @@
 import gradio as gr
 import os
-from langchain.document_loaders import PyMuPDFLoader
+from langchain_community.document_loaders import PyMuPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import gc
@@ -442,12 +442,28 @@ def create_interface():
     
     return interface
 
+# Create the app instance
+app = create_interface()
+
+# For Gradio compatibility with WSGI servers like Gunicorn
+# Gradio apps need to be wrapped properly for WSGI
+def create_app():
+    return app
+
 # Launch the application
 if __name__ == "__main__":
-    app = create_interface()
+    # Development
+    # app.launch(
+    #     server_name="0.0.0.0",
+    #     server_port=7860,
+    #     share=False,
+    #     debug=True
+    # )
+
+    # Production
     app.launch(
         server_name="0.0.0.0",
         server_port=7860,
-        share=False,
-        debug=True
+        share=True,
+        debug=False
     )
