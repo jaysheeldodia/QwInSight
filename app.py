@@ -262,7 +262,7 @@ qa_system = EnhancedPDFQASystem()
 
 # Create the Gradio interface
 def create_interface():
-    with gr.Blocks(title="Enhanced PDF Q&A with RAG", theme=gr.themes.Soft()) as interface:
+    with gr.Blocks(title="QwInSight", theme=gr.themes.Soft()) as interface:
         gr.Markdown("# 🔍 Enhanced PDF Q&A with Retrieval-Augmented Generation")
         gr.Markdown("Upload a PDF document and ask questions using advanced vector search and Qwen language models.")
         gr.Markdown("**📋 Installation Requirements:** `pip install sentence-transformers langchain faiss-cpu transformers torch`")
@@ -453,17 +453,17 @@ def create_app():
 # Launch the application
 if __name__ == "__main__":
     # Development
-    # app.launch(
-    #     server_name="0.0.0.0",
-    #     server_port=7860,
-    #     share=False,
-    #     debug=True
-    # )
-
-    # Production
     app.launch(
         server_name="0.0.0.0",
         server_port=7860,
-        share=True,
-        debug=False
+        share=False,
+        debug=True
     )
+
+    # Production
+    # app.launch(
+    #     server_name="0.0.0.0",
+    #     server_port=7860,
+    #     share=True,
+    #     debug=False
+    # )
