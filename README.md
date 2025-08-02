@@ -349,7 +349,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔮 Roadmap
 
 ### Version 2.0 (Planned)
-- [-] Multi-language support
+- [x] Multi-language support
 - [x] Batch document processing
 - [ ] Advanced query types (summarization, comparison)
 - [ ] Integration with cloud storage (Google Drive, Dropbox)
