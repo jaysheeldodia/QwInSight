@@ -1,4 +1,4 @@
-# 🔍 Enhanced PDF Q&A System with RAG
+# 🔍 QwInSight: Enhanced PDF Q&A System with RAG
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Gradio](https://img.shields.io/badge/Gradio-4.0+-orange.svg)](https://gradio.app/)
@@ -349,8 +349,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔮 Roadmap
 
 ### Version 2.0 (Planned)
-- [ ] Multi-language support
-- [ ] Batch document processing
+- [-] Multi-language support
+- [x] Batch document processing
 - [ ] Advanced query types (summarization, comparison)
 - [ ] Integration with cloud storage (Google Drive, Dropbox)
 - [ ] REST API endpoints
@@ -367,4 +367,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **⭐ Star this repository if you find it helpful!**
 
-*Built with ❤️ by the open-source community*
+*Built with ❤️*

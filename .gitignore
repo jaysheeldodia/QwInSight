@@ -145,6 +145,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Sample Files for this project
+sample_pdfs
+
 # Spyder project settings
 .spyderproject
 .spyproject

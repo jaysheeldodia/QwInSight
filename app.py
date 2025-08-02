@@ -7,8 +7,10 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import gc
+import re
+from langdetect import detect
 
-class EnhancedPDFQASystem:
+class EnhancedMultilingualPDFQASystem:
     def __init__(self):
         self.model = None
         self.tokenizer = None
@@ -17,6 +19,91 @@ class EnhancedPDFQASystem:
         self.embeddings = None
         self.vector_store = None
         self.documents = None
+        self.processed_files = []  # Track processed files
+        
+        # Language detection and mapping
+        self.language_map = {
+            'en': 'English',
+            'hi': 'Hindi',
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'pt': 'Portuguese',
+            'ru': 'Russian',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'ar': 'Arabic',
+            'zh': 'Chinese',
+            'it': 'Italian',
+            'nl': 'Dutch',
+            'tr': 'Turkish'
+        }
+    
+    def detect_language(self, text):
+        """Detect the language of input text and check for Hinglish patterns"""
+        try:
+            # First check for Hinglish patterns (mix of Hindi and English)
+            if self.is_hinglish(text):
+                return 'hinglish', 'Hinglish'
+            
+            # Use langdetect for other languages
+            detected_lang = detect(text)
+            language_name = self.language_map.get(detected_lang, detected_lang.upper())
+            
+            return detected_lang, language_name
+        except:
+            # Default to English if detection fails
+            return 'en', 'English'
+    
+    def is_hinglish(self, text):
+        """Check if text contains Hinglish patterns (mix of Hindi and English characters)"""
+        # Check for presence of both Devanagari and Latin scripts
+        has_devanagari = bool(re.search(r'[\u0900-\u097F]', text))
+        has_latin = bool(re.search(r'[a-zA-Z]', text))
+        
+        # Check for common Hinglish words/patterns
+        hinglish_patterns = [
+            r'\b(kya|hai|aur|ka|ki|ke|main|mein|se|ko|me|hoon|hun|tum|ap|aap)\b',
+            r'\b(bharat|india|delhi|mumbai|kolkata|chennai)\b',
+            r'\b(rajdhani|rajniti|sarkar|desh|log|sab)\b'
+        ]
+        
+        has_hinglish_words = any(re.search(pattern, text.lower()) for pattern in hinglish_patterns)
+        
+        return (has_devanagari and has_latin) or has_hinglish_words
+    
+    def get_language_instruction(self, lang_code, lang_name):
+        """Get appropriate language instruction for the model"""
+        if lang_code == 'hinglish':
+            return "Please respond in Hinglish (a mix of Hindi and English, using Roman script for Hindi words). Use simple Hindi words written in English letters mixed with English words."
+        elif lang_code == 'hi':
+            return "कृपया हिंदी में उत्तर दें।"
+        elif lang_code == 'es':
+            return "Por favor responde en español."
+        elif lang_code == 'fr':
+            return "Veuillez répondre en français."
+        elif lang_code == 'de':
+            return "Bitte antworten Sie auf Deutsch."
+        elif lang_code == 'pt':
+            return "Por favor, responda em português."
+        elif lang_code == 'ru':
+            return "Пожалуйста, отвечайте на русском языке."
+        elif lang_code == 'ja':
+            return "日本語で回答してください。"
+        elif lang_code == 'ko':
+            return "한국어로 답변해 주세요."
+        elif lang_code == 'ar':
+            return "يرجى الإجابة باللغة العربية."
+        elif lang_code == 'zh':
+            return "请用中文回答。"
+        elif lang_code == 'it':
+            return "Si prega di rispondere in italiano."
+        elif lang_code == 'nl':
+            return "Gelieve in het Nederlands te antwoorden."
+        elif lang_code == 'tr':
+            return "Lütfen Türkçe cevap verin."
+        else:
+            return "Please respond in English."
         
     def unload_current_model(self):
         """Properly unload the current model from GPU memory"""
@@ -67,30 +154,38 @@ class EnhancedPDFQASystem:
                 if torch.cuda.is_available():
                     memory_after = torch.cuda.memory_allocated() / 1024**3  # GB
                     memory_used = memory_after - memory_before
-                    return f"✅ Model {model_name} loaded successfully!\n💾 GPU Memory: {memory_after:.2f} GB (+{memory_used:.2f} GB)"
+                    return f"✅ Model {model_name} loaded successfully!\n💾 GPU Memory: {memory_after:.2f} GB (+{memory_used:.2f} GB)\n🌐 Multilingual support enabled!"
                 else:
-                    return f"✅ Model {model_name} loaded successfully! (CPU mode)"
+                    return f"✅ Model {model_name} loaded successfully! (CPU mode)\n🌐 Multilingual support enabled!"
                     
             except Exception as e:
                 return f"❌ Error loading model: {str(e)}"
-        return f"✅ Model {model_name} already loaded!"
+        return f"✅ Model {model_name} already loaded!\n🌐 Multilingual support enabled!"
     
     def load_embeddings(self):
         """Load embedding model for vector search"""
         if self.embeddings is None:
             try:
+                # Use multilingual embedding model for better cross-language performance
                 self.embeddings = HuggingFaceEmbeddings(
-                    model_name="sentence-transformers/all-MiniLM-L6-v2"
+                    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
                 )
-                return "✅ Embedding model loaded!"
+                return "✅ Multilingual embedding model loaded!"
             except Exception as e:
-                return f"❌ Error loading embeddings: {str(e)}"
-        return "✅ Embedding model already loaded!"
+                # Fallback to English model if multilingual fails
+                try:
+                    self.embeddings = HuggingFaceEmbeddings(
+                        model_name="sentence-transformers/all-MiniLM-L6-v2"
+                    )
+                    return "✅ Embedding model loaded (English-focused)!"
+                except Exception as e2:
+                    return f"❌ Error loading embeddings: {str(e2)}"
+        return "✅ Multilingual embedding model already loaded!"
     
-    def process_pdf(self, pdf_file, chunk_size, chunk_overlap):
-        """Process uploaded PDF with chunking and create vector store"""
-        if pdf_file is None:
-            return "❌ No PDF file uploaded!"
+    def process_multiple_pdfs(self, pdf_files, chunk_size, chunk_overlap):
+        """Process multiple uploaded PDFs with chunking and create vector store"""
+        if not pdf_files or len(pdf_files) == 0:
+            return "❌ No PDF files uploaded!"
         
         try:
             # Load embeddings first
@@ -98,15 +193,37 @@ class EnhancedPDFQASystem:
             if "❌" in embed_status:
                 return embed_status
             
-            # Get the file path from the uploaded file
-            if hasattr(pdf_file, 'name'):
-                file_path = pdf_file.name
-            else:
-                file_path = pdf_file
+            all_documents = []
+            file_info = []
+            total_pages = 0
             
-            # Load the PDF using PyMuPDFLoader
-            loader = PyMuPDFLoader(file_path)
-            documents = loader.load()
+            # Process each PDF file
+            for i, pdf_file in enumerate(pdf_files):
+                # Get the file path from the uploaded file
+                if hasattr(pdf_file, 'name'):
+                    file_path = pdf_file.name
+                    file_name = os.path.basename(file_path)
+                else:
+                    file_path = pdf_file
+                    file_name = os.path.basename(pdf_file)
+                
+                print(f"Processing file {i+1}/{len(pdf_files)}: {file_name}")
+                
+                # Load the PDF using PyMuPDFLoader
+                loader = PyMuPDFLoader(file_path)
+                documents = loader.load()
+                
+                # Add source file information to metadata
+                for doc in documents:
+                    doc.metadata['source_file'] = file_name
+                    doc.metadata['file_index'] = i
+                
+                all_documents.extend(documents)
+                file_info.append({
+                    'name': file_name,
+                    'pages': len(documents)
+                })
+                total_pages += len(documents)
             
             # Split documents into chunks
             text_splitter = RecursiveCharacterTextSplitter(
@@ -115,7 +232,7 @@ class EnhancedPDFQASystem:
                 length_function=len,
                 separators=["\n\n", "\n", " ", ""]
             )
-            self.documents = text_splitter.split_documents(documents)
+            self.documents = text_splitter.split_documents(all_documents)
             
             # Create FAISS vector store
             self.vector_store = FAISS.from_documents(self.documents, self.embeddings)
@@ -124,33 +241,45 @@ class EnhancedPDFQASystem:
                 search_kwargs={"k": 4}  # Retrieve top 4 most relevant chunks
             )
             
-            pages_count = len(documents)
+            self.processed_files = file_info
             chunks_count = len(self.documents)
             
             # Show sample chunks for preview
             sample_chunks = []
             for i, doc in enumerate(self.documents[:3]):
                 preview = doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
-                sample_chunks.append(f"**Chunk {i+1}:** {preview}")
+                source_info = f"[{doc.metadata.get('source_file', 'Unknown')} - Page {doc.metadata.get('page', 'Unknown')}]"
+                sample_chunks.append(f"**Chunk {i+1}** {source_info}: {preview}")
             
             preview_text = "\n\n".join(sample_chunks)
             
-            return f"""✅ PDF processed successfully!
+            # Create file summary
+            files_summary = "\n".join([f"- **{info['name']}**: {info['pages']} pages" for info in file_info])
+            
+            return f"""✅ Multiple PDFs processed successfully with multilingual support!
 
-**Document Info:**
-- Pages: {pages_count}
+**📚 Processed Files ({len(pdf_files)} files):**
+{files_summary}
+
+**📊 Document Statistics:**
+- Total pages: {total_pages}
 - Text chunks created: {chunks_count}
 - Chunk size: {chunk_size} characters
 - Chunk overlap: {chunk_overlap} characters
 
-**Sample chunks:**
+**🌐 Multilingual Features:**
+- Supports questions in multiple languages
+- Auto-detects language and responds accordingly
+- Special support for Hinglish (Hindi + English mix)
+
+**🔍 Sample chunks:**
 {preview_text}
 
-🔍 Vector search is now ready!"""
+🔍 Vector search is now ready across all documents in multiple languages!"""
             
         except Exception as e:
             import traceback
-            return f"❌ Error processing PDF: {str(e)}\n\n{traceback.format_exc()}"
+            return f"❌ Error processing PDFs: {str(e)}\n\n{traceback.format_exc()}"
     
     def retrieve_relevant_context(self, question, num_chunks):
         """Retrieve relevant document chunks for the question"""
@@ -167,43 +296,67 @@ class EnhancedPDFQASystem:
             return []
     
     def answer_question(self, question, model_name, max_tokens, num_chunks, temperature):
-        """Generate answer using RAG approach with retrieved context"""
+        """Generate answer using RAG approach with retrieved context and language detection"""
         if self.model is None or self.current_model_name != model_name:
             return "❌ Please load the model first!"
         
         if self.retriever is None:
-            return "❌ Please upload and process a PDF first!"
+            return "❌ Please upload and process PDF files first!"
         
         if not question.strip():
             return "❌ Please enter a question!"
         
         try:
+            # Detect language of the question
+            lang_code, lang_name = self.detect_language(question)
+            print(f"Detected language: {lang_name} ({lang_code})")
+            
             # Retrieve relevant context
             relevant_docs = self.retrieve_relevant_context(question, num_chunks)
             
             if not relevant_docs:
-                return "❌ No relevant context found in the document."
+                if lang_code == 'hinglish':
+                    return "❌ Koi relevant information documents mein nahi mila."
+                elif lang_code == 'hi':
+                    return "❌ दस्तावेजों में कोई प्रासंगिक जानकारी नहीं मिली।"
+                elif lang_code == 'es':
+                    return "❌ No se encontró información relevante en los documentos."
+                else:
+                    return "❌ No relevant context found in the documents."
             
-            # Combine retrieved contexts
+            # Combine retrieved contexts with source information
             context_parts = []
             for i, doc in enumerate(relevant_docs):
-                context_parts.append(f"**Context {i+1}:**\n{doc.page_content}\n")
+                source_file = doc.metadata.get('source_file', 'Unknown file')
+                page_num = doc.metadata.get('page', 'Unknown page')
+                context_parts.append(f"**Context {i+1}** [Source: {source_file}, Page: {page_num}]:\n{doc.page_content}\n")
             
             combined_context = "\n".join(context_parts)
             
-            # Create the prompt with retrieved context
-            prompt = f"""Based on the following context from the document, please answer the question accurately and comprehensively.
+            # Get language-specific instruction
+            language_instruction = self.get_language_instruction(lang_code, lang_name)
+            
+            # Create the multilingual prompt with retrieved context
+            prompt = f"""Based on the following context from multiple documents, please answer the question accurately and comprehensively.
 
-**Retrieved Context:**
+**Language Instruction:** {language_instruction}
+
+**Retrieved Context from Documents:**
 {combined_context}
 
 **Question:** {question}
 
 **Instructions:**
-- Answer based solely on the provided context
-- If the context doesn't contain enough information, say so clearly
+- Answer based solely on the provided context from the documents
+- IMPORTANT: Respond in the same language as the question was asked
+- If the question is in Hinglish, respond in Hinglish (mix Hindi and English using Roman script)
+- If the question is in Hindi, respond in Hindi
+- If the question is in Spanish, respond in Spanish
+- If the context doesn't contain enough information, say so clearly in the same language
 - Provide specific details and quotes when relevant
+- Mention which document(s) the information comes from when possible
 - Structure your response clearly with proper formatting
+- Maintain the natural flow and style of the detected language
 
 **Answer:**"""
 
@@ -244,28 +397,40 @@ class EnhancedPDFQASystem:
 
             content = self.tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
             
-            # Add context information to the response
-            context_info = f"\n\n---\n**📚 Retrieved Context Sources:**\n"
-            for i, doc in enumerate(relevant_docs):
-                page_info = f"Page {doc.metadata.get('page', 'Unknown')}" if 'page' in doc.metadata else "Source document"
-                preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
-                context_info += f"- **Context {i+1}** ({page_info}): {preview}\n"
+            # Add context information to the response in appropriate language
+            if lang_code == 'hinglish':
+                context_info = f"\n\n---\n**📚 Retrieved Context Sources (Ye sources se answer mila):**\n"
+            elif lang_code == 'hi':
+                context_info = f"\n\n---\n**📚 प्राप्त संदर्भ स्रोत:**\n"
+            elif lang_code == 'es':
+                context_info = f"\n\n---\n**📚 Fuentes de Contexto Recuperadas:**\n"
+            else:
+                context_info = f"\n\n---\n**📚 Retrieved Context Sources:**\n"
             
-            return content + context_info
+            for i, doc in enumerate(relevant_docs):
+                source_file = doc.metadata.get('source_file', 'Unknown file')
+                page_info = f"Page {doc.metadata.get('page', 'Unknown')}"
+                preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
+                context_info += f"- **Context {i+1}** ({source_file}, {page_info}): {preview}\n"
+            
+            # Add language detection info
+            lang_info = f"\n**🌐 Detected Language:** {lang_name}"
+            
+            return content + context_info + lang_info
 
         except Exception as e:
             import traceback
             return f"❌ Error generating answer: {str(e)}\n\n{traceback.format_exc()}"
 
-# Initialize the enhanced QA system
-qa_system = EnhancedPDFQASystem()
+# Initialize the enhanced multilingual QA system
+qa_system = EnhancedMultilingualPDFQASystem()
 
 # Create the Gradio interface
 def create_interface():
-    with gr.Blocks(title="QwInSight", theme=gr.themes.Soft()) as interface:
-        gr.Markdown("# 🔍 Enhanced PDF Q&A with Retrieval-Augmented Generation")
-        gr.Markdown("Upload a PDF document and ask questions using advanced vector search and Qwen language models.")
-        gr.Markdown("**📋 Installation Requirements:** `pip install sentence-transformers langchain faiss-cpu transformers torch`")
+    with gr.Blocks(title="QwInSight Multi-PDF Multilingual", theme=gr.themes.Soft()) as interface:
+        gr.Markdown("# 🌐 Enhanced Multilingual Multi-PDF Q&A with RAG")
+        gr.Markdown("Upload multiple PDF documents and ask questions in any language! Supports English, Hindi, Hinglish, Spanish, French, German, and many more languages.")
+        gr.Markdown("**📋 Installation:** `pip install sentence-transformers langchain faiss-cpu transformers torch langdetect`")
         
         with gr.Row():
             with gr.Column(scale=1):
@@ -275,7 +440,7 @@ def create_interface():
                     choices=["Qwen/Qwen3-1.7B", "Qwen/Qwen3-4B"],
                     label="Select Qwen Model",
                     value="Qwen/Qwen3-1.7B",
-                    info="Choose the Qwen model for text generation"
+                    info="Choose the Qwen model for multilingual text generation"
                 )
                 
                 load_model_btn = gr.Button("🔄 Load Model", variant="primary")
@@ -288,8 +453,9 @@ def create_interface():
                 # PDF processing configuration
                 gr.Markdown("### 📄 Document Processing")
                 pdf_upload = gr.File(
-                    label="Upload PDF Document",
-                    file_types=[".pdf"]
+                    label="Upload PDF Documents (Multiple Files Supported)",
+                    file_types=[".pdf"],
+                    file_count="multiple"
                 )
                 
                 with gr.Row():
@@ -311,21 +477,23 @@ def create_interface():
                         info="Overlap between consecutive chunks"
                     )
                 
-                process_pdf_btn = gr.Button("📋 Process PDF & Create Vector Store", variant="primary")
+                process_pdf_btn = gr.Button("📋 Process All PDFs & Create Vector Store", variant="primary")
                 
                 pdf_status = gr.Textbox(
                     label="Processing Status",
-                    value="No PDF uploaded",
+                    value="No PDF files uploaded",
                     interactive=False,
-                    lines=8
+                    lines=12
                 )
             
             with gr.Column(scale=2):
                 # Question and answer section
-                gr.Markdown("### 💬 Ask Questions")
+                gr.Markdown("### 💬 Ask Questions in Any Language")
+                gr.Markdown("**🌐 Supported Languages:** English, Hindi, Hinglish, Spanish, French, German, Portuguese, Russian, Japanese, Korean, Arabic, Chinese, Italian, Dutch, Turkish")
+                
                 question_input = gr.Textbox(
-                    label="Your Question",
-                    placeholder="Ask a question about the uploaded PDF...",
+                    label="Your Question (किसी भी भाषा में / En cualquier idioma)",
+                    placeholder="Ask a question in any language: 'What is...?' / 'Kya hai...?' / '¿Qué es...?' / 'Was ist...?'",
                     lines=3
                 )
                 
@@ -334,7 +502,7 @@ def create_interface():
                     max_tokens_slider = gr.Slider(
                         minimum=100,
                         maximum=1000,
-                        value=300,
+                        value=400,
                         step=50,
                         label="Max New Tokens",
                         info="Maximum response length"
@@ -363,7 +531,7 @@ def create_interface():
                 # Answer output with markdown rendering
                 answer_output = gr.Markdown(
                     label="Answer",
-                    value="*The answer will appear here...*"
+                    value="*The answer will appear here in your language...*"
                 )
                 
                 # Control buttons
@@ -371,15 +539,31 @@ def create_interface():
                     clear_btn = gr.Button("🗑️ Clear All", variant="secondary")
                     example_btn = gr.Button("💡 Load Example Questions", variant="secondary")
         
-        # Example questions section
+        # Multilingual example questions section
         with gr.Row():
             gr.Markdown("""
-            ### 💡 Example Questions to Try:
-            - **Summary**: "What are the main findings or conclusions of this document?"
-            - **Specific Details**: "What methodology was used in this research?"
-            - **Analysis**: "What are the key recommendations mentioned?"
-            - **Comparison**: "How does this approach differ from previous methods?"
-            - **Technical**: "What are the technical specifications mentioned?"
+            ### 💡 Multilingual Example Questions:
+            
+            **English:**
+            - "What are the main findings across all documents?"
+            - "How do the approaches differ between the documents?"
+            
+            **Hindi:**
+            - "सभी दस्तावेजों में मुख्य निष्कर्ष क्या हैं?"
+            - "दस्तावेजों के बीच दृष्टिकोण कैसे भिन्न हैं?"
+            
+            **Hinglish:**
+            - "Documents mein kya main findings hai?"
+            - "Sabse important recommendations kya hai?"
+            - "Kis document mein best analysis hai?"
+            
+            **Spanish:**
+            - "¿Cuáles son los principales hallazgos en todos los documentos?"
+            - "¿Cómo difieren los enfoques entre los documentos?"
+            
+            **French:**
+            - "Quelles sont les principales conclusions de tous les documents?"
+            - "Comment les approches diffèrent-elles entre les documents?"
             """)
         
         # Event handlers
@@ -390,7 +574,7 @@ def create_interface():
         )
         
         process_pdf_btn.click(
-            fn=qa_system.process_pdf,
+            fn=qa_system.process_multiple_pdfs,
             inputs=[pdf_upload, chunk_size_slider, chunk_overlap_slider],
             outputs=[pdf_status]
         )
@@ -405,7 +589,8 @@ def create_interface():
             qa_system.retriever = None
             qa_system.vector_store = None
             qa_system.documents = None
-            return "", "No PDF uploaded", "*Ask a question about the uploaded PDF...*", ""
+            qa_system.processed_files = []
+            return "", "No PDF files uploaded", "*Ask a question in any language...*", ""
         
         def unload_model():
             qa_system.unload_current_model()
@@ -428,16 +613,17 @@ def create_interface():
         
         def load_examples():
             examples = [
-                "What is the main topic and purpose of this document?",
-                "Can you summarize the key findings or conclusions?",
-                "What methodology or approach is described?",
-                "Are there any specific recommendations or suggestions mentioned?"
+                "What are the main topics covered across all documents?",
+                "सभी दस्तावेजों में मुख्य विषय क्या हैं?",
+                "Documents mein kya main findings hai?",
+                "¿Cuáles son los temas principales cubiertos en todos los documentos?",
+                "Quels sont les principaux sujets couverts dans tous les documents?"
             ]
-            return gr.update(choices=examples, value=examples[0])
+            return examples[0]
         
         example_btn.click(
             fn=load_examples,
-            outputs=[]
+            outputs=[question_input]
         )
     
     return interface
@@ -446,7 +632,6 @@ def create_interface():
 app = create_interface()
 
 # For Gradio compatibility with WSGI servers like Gunicorn
-# Gradio apps need to be wrapped properly for WSGI
 def create_app():
     return app
 
