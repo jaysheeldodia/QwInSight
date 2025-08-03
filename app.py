@@ -283,51 +283,12 @@ class ConfigurablePDFQASystem:
             self.processed_files = file_info
             chunks_count = len(self.documents)
             
-            # Show sample chunks for preview
-            sample_chunks = []
-            for i, doc in enumerate(self.documents[:3]):
-                preview = doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
-                source_info = f"[{doc.metadata.get('source_file', 'Unknown')} - Page {doc.metadata.get('page', 'Unknown')}]"
-                sample_chunks.append(f"**Chunk {i+1}** {source_info}: {preview}")
-            
-            preview_text = "\n\n".join(sample_chunks)
-            
-            # Create file summary
-            files_summary = "\n".join([f"- **{info['name']}**: {info['pages']} pages" for info in file_info])
-            
-            # Language features text
-            if self.multilingual_mode:
-                lang_features = """**🌐 Multilingual Features:**
-- Supports questions in multiple languages
-- Auto-detects language and responds accordingly
-- Special support for Hinglish (Hindi + English mix)"""
-            else:
-                lang_features = """**🇺🇸 English-Only Mode:**
-- Optimized for English language processing
-- Faster performance with English-focused models
-- Simpler, more reliable processing"""
-            
-            return f"""✅ Multiple PDFs processed successfully!
-
-**📚 Processed Files ({len(pdf_files)} files):**
-{files_summary}
-
-**📊 Document Statistics:**
-- Total pages: {total_pages}
-- Text chunks created: {chunks_count}
-- Chunk size: {chunk_size} characters
-- Chunk overlap: {chunk_overlap} characters
-
-{lang_features}
-
-**🔍 Sample chunks:**
-{preview_text}
-
-🔍 Vector search is now ready across all documents!"""
+            # Simple success message
+            files_summary = ", ".join([info['name'] for info in file_info])
+            return f"✅ Successfully processed {len(pdf_files)} files: {files_summary}\n📊 {total_pages} pages → {chunks_count} searchable chunks"
             
         except Exception as e:
-            import traceback
-            return f"❌ Error processing PDFs: {str(e)}\n\n{traceback.format_exc()}"
+            return f"❌ Error processing PDFs: {str(e)}"
     
     def retrieve_relevant_context(self, question, num_chunks):
         """Retrieve relevant document chunks for the question"""
@@ -468,309 +429,206 @@ class ConfigurablePDFQASystem:
 
             content = self.tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
             
-            # Add context information to the response in appropriate language
-            if self.multilingual_mode:
-                if lang_code == 'hinglish':
-                    context_info = f"\n\n---\n**📚 Retrieved Context Sources (Ye sources se answer mila):**\n"
-                elif lang_code == 'hi':
-                    context_info = f"\n\n---\n**📚 प्राप्त संदर्भ स्रोत:**\n"
-                elif lang_code == 'es':
-                    context_info = f"\n\n---\n**📚 Fuentes de Contexto Recuperadas:**\n"
-                else:
-                    context_info = f"\n\n---\n**📚 Retrieved Context Sources:**\n"
-            else:
-                context_info = f"\n\n---\n**📚 Retrieved Context Sources:**\n"
+            # Add minimal context information
+            context_info = f"\n\n---\n**📚 Sources:** "
+            sources = []
+            for doc in relevant_docs:
+                source_file = doc.metadata.get('source_file', 'Unknown')
+                sources.append(source_file)
             
-            for i, doc in enumerate(relevant_docs):
-                source_file = doc.metadata.get('source_file', 'Unknown file')
-                page_info = f"Page {doc.metadata.get('page', 'Unknown')}"
-                preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
-                context_info += f"- **Context {i+1}** ({source_file}, {page_info}): {preview}\n"
+            unique_sources = list(dict.fromkeys(sources))  # Remove duplicates while preserving order
+            context_info += ", ".join(unique_sources)
             
-            # Add language detection info (only in multilingual mode)
-            if self.multilingual_mode:
-                lang_info = f"\n**🌐 Detected Language:** {lang_name}"
-                return content + context_info + lang_info
-            else:
-                return content + context_info
+            return content + context_info
 
         except Exception as e:
-            import traceback
-            return f"❌ Error generating answer: {str(e)}\n\n{traceback.format_exc()}"
+            return f"❌ Error generating answer: {str(e)}"
 
 # Initialize the configurable QA system
 qa_system = ConfigurablePDFQASystem()
 
 # Create the Gradio interface
 def create_interface():
-    with gr.Blocks(title="QwInSight Configurable PDF Q&A", theme=gr.themes.Soft()) as interface:
-        gr.Markdown("# 🔍 Configurable PDF Q&A with RAG")
-        gr.Markdown("Choose between English-only or Multilingual support, then upload PDF documents and ask questions!")
+    with gr.Blocks(title="PDF Q&A Assistant", theme=gr.themes.Soft()) as interface:
         
-        # Language mode selection at the top
+        # Header
+        gr.Markdown("# 🔍 PDF Q&A Assistant", elem_classes="text-center")
+        gr.Markdown("Upload PDFs, ask questions, get intelligent answers with source citations", elem_classes="text-center")
+        
+        # Main workflow in tabs for better organization
+        with gr.Tabs():
+            
+            # Tab 1: Setup
+            with gr.TabItem("🛠️ Setup", id="setup"):
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.Markdown("### 🌐 Language Support")
+                        language_mode = gr.Radio(
+                            choices=[
+                                ("English Only (Faster)", False),
+                                ("Multilingual Support", True)
+                            ],
+                            label="Choose Mode",
+                            value=False,
+                            info="Multilingual supports 15+ languages including Hindi, Spanish, French"
+                        )
+                        
+                        gr.Markdown("### 🤖 AI Model")
+                        model_dropdown = gr.Dropdown(
+                            choices=["Qwen/Qwen3-1.7B", "Qwen/Qwen3-4B"],
+                            label="Select Model",
+                            value="Qwen/Qwen3-1.7B",
+                            info="Qwen3-4B is more capable but requires more memory"
+                        )
+                        
+                        load_model_btn = gr.Button("🔄 Load Model", variant="primary", size="lg")
+                    
+                    with gr.Column(scale=1):
+                        model_status = gr.Textbox(
+                            label="Status",
+                            value="No model loaded",
+                            interactive=False,
+                            lines=4
+                        )
+                        
+                        # Advanced settings in an accordion (collapsed by default)
+                        with gr.Accordion("⚙️ Advanced Settings", open=False):
+                            chunk_size_slider = gr.Slider(
+                                minimum=200, maximum=1000, value=500, step=50,
+                                label="Text Chunk Size",
+                                info="Larger chunks = more context, smaller chunks = more precise"
+                            )
+                            chunk_overlap_slider = gr.Slider(
+                                minimum=0, maximum=200, value=50, step=10,
+                                label="Chunk Overlap",
+                                info="Overlap helps maintain context between chunks"
+                            )
+
+                # Event handlers for setup tab
+                language_mode.change(
+                    fn=qa_system.set_language_mode,
+                    inputs=[language_mode],
+                    outputs=[model_status]
+                )
+                
+                load_model_btn.click(
+                    fn=qa_system.load_model,
+                    inputs=[model_dropdown],
+                    outputs=[model_status]
+                )
+            
+            # Tab 2: Documents
+            with gr.TabItem("📄 Documents", id="documents"):
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        pdf_upload = gr.File(
+                            label="📁 Upload PDF Documents",
+                            file_types=[".pdf"],
+                            file_count="multiple",
+                            height=200
+                        )
+                        
+                        process_pdf_btn = gr.Button("🔄 Process Documents", variant="primary", size="lg")
+                    
+                    with gr.Column(scale=1):
+                        pdf_status = gr.Textbox(
+                            label="Processing Status",
+                            value="No documents uploaded",
+                            interactive=False,
+                            lines=8
+                        )
+
+                process_pdf_btn.click(
+                    fn=qa_system.process_multiple_pdfs,
+                    inputs=[pdf_upload, chunk_size_slider, chunk_overlap_slider],
+                    outputs=[pdf_status]
+                )
+            
+            # Tab 3: Q&A (Main interaction)
+            with gr.TabItem("💬 Ask Questions", id="qa"):
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        question_input = gr.Textbox(
+                            label="Your Question",
+                            placeholder="What would you like to know about your documents?",
+                            lines=3
+                        )
+                        
+                        with gr.Row():
+                            ask_btn = gr.Button("🤔 Ask Question", variant="primary", size="lg")
+                            clear_btn = gr.Button("🗑️ Clear", variant="secondary")
+                        
+                        # Generation controls in an accordion
+                        with gr.Accordion("🎛️ Response Settings", open=False):
+                            with gr.Row():
+                                max_tokens_slider = gr.Slider(
+                                    minimum=100, maximum=800, value=400, step=50,
+                                    label="Response Length", 
+                                    info="Maximum length of the response"
+                                )
+                                temperature_slider = gr.Slider(
+                                    minimum=0.1, maximum=1.0, value=0.7, step=0.1,
+                                    label="Creativity",
+                                    info="Higher = more creative, Lower = more focused"
+                                )
+                            
+                            num_chunks_slider = gr.Slider(
+                                minimum=1, maximum=8, value=4, step=1,
+                                label="Context Sources",
+                                info="How many document sections to consider"
+                            )
+                    
+                    with gr.Column(scale=3):
+                        answer_output = gr.Markdown(
+                            value="*Your answer will appear here...*",
+                            label="Answer"
+                        )
+
+                # Event handlers for Q&A tab
+                ask_btn.click(
+                    fn=qa_system.answer_question,
+                    inputs=[question_input, model_dropdown, max_tokens_slider, num_chunks_slider, temperature_slider],
+                    outputs=[answer_output]
+                )
+                
+                def clear_qa():
+                    return "", "*Your answer will appear here...*"
+                
+                clear_btn.click(
+                    fn=clear_qa,
+                    outputs=[question_input, answer_output]
+                )
+        
+        # Footer with quick actions
         with gr.Row():
             with gr.Column():
-                gr.Markdown("### 🌐 Language Mode Selection")
-                language_mode = gr.Radio(
-                    choices=[
-                        ("English Only (Faster, Optimized)", False),
-                        ("Multilingual (Supports 15 Languages)", True)
-                    ],
-                    label="Select Language Support",
-                    value=False,  # Default to English-only
-                    info="English-only mode is faster and uses lighter models. Multilingual mode supports Hindi, Hinglish, Spanish, French, German, and more."
-                )
-                
-                mode_status = gr.Textbox(
-                    label="Language Mode Status",
-                    value="Language mode: English-only",
-                    interactive=False
-                )
-        
-        
-        with gr.Row():
-            with gr.Column(scale=1):
-                # Model selection
-                gr.Markdown("### 🤖 Model Configuration")
-                model_dropdown = gr.Dropdown(
-                    choices=["Qwen/Qwen3-1.7B", "Qwen/Qwen3-4B"],
-                    label="Select Qwen Model",
-                    value="Qwen/Qwen3-1.7B",
-                    info="Choose the Qwen model for text generation"
-                )
-                
-                load_model_btn = gr.Button("🔄 Load Model", variant="primary")
-                model_status = gr.Textbox(
-                    label="Model Status",
-                    value="No model loaded",
-                    interactive=False
-                )
-                
-                # PDF processing configuration
-                gr.Markdown("### 📄 Document Processing")
-                pdf_upload = gr.File(
-                    label="Upload PDF Documents (Multiple Files Supported)",
-                    file_types=[".pdf"],
-                    file_count="multiple"
-                )
-                
-                with gr.Row():
-                    chunk_size_slider = gr.Slider(
-                        minimum=200,
-                        maximum=1000,
-                        value=500,
-                        step=50,
-                        label="Chunk Size",
-                        info="Size of text chunks for processing"
-                    )
-                    
-                    chunk_overlap_slider = gr.Slider(
-                        minimum=0,
-                        maximum=200,
-                        value=50,
-                        step=10,
-                        label="Chunk Overlap",
-                        info="Overlap between consecutive chunks"
-                    )
-                
-                process_pdf_btn = gr.Button("📋 Process All PDFs & Create Vector Store", variant="primary")
-                
-                pdf_status = gr.Textbox(
-                    label="Processing Status",
-                    value="No PDF files uploaded",
-                    interactive=False,
-                    lines=12
-                )
+                gr.Markdown("### 💡 Quick Tips")
+                gr.Markdown("""
+                • **Setup**: Choose language mode → Load model → Upload PDFs
+                • **Ask**: Be specific in your questions for better answers
+                • **Sources**: Check the sources section in each answer
+                """)
             
-            with gr.Column(scale=2):
-                # Question and answer section (dynamic based on mode)
-                question_section_title = gr.Markdown("### 💬 Ask Questions")
-                supported_languages = gr.Markdown("**🇺🇸 English-only mode active**")
-                
-                question_input = gr.Textbox(
-                    label="Your Question",
-                    placeholder="Ask a question about the uploaded PDFs...",
-                    lines=3
-                )
-                
-                # Generation parameters
-                with gr.Row():
-                    max_tokens_slider = gr.Slider(
-                        minimum=100,
-                        maximum=1000,
-                        value=400,
-                        step=50,
-                        label="Max New Tokens",
-                        info="Maximum response length"
-                    )
-                    
-                    num_chunks_slider = gr.Slider(
-                        minimum=1,
-                        maximum=8,
-                        value=4,
-                        step=1,
-                        label="Retrieved Chunks",
-                        info="Number of relevant chunks to retrieve"
-                    )
-                
-                temperature_slider = gr.Slider(
-                    minimum=0.1,
-                    maximum=1.0,
-                    value=0.7,
-                    step=0.1,
-                    label="Temperature",
-                    info="Controls randomness in generation"
-                )
-                
-                ask_btn = gr.Button("🤔 Ask Question", variant="primary", size="lg")
-                
-                # Answer output with markdown rendering
-                answer_output = gr.Markdown(
-                    label="Answer",
-                    value="*The answer will appear here...*"
-                )
-                
-                # Control buttons
-                with gr.Row():
-                    clear_btn = gr.Button("🗑️ Clear All", variant="secondary")
-                    example_btn = gr.Button("💡 Load Example Questions", variant="secondary")
-        
-        # Example questions section (dynamic based on mode)
-        example_questions = gr.Markdown("""
-        ### 💡 Example Questions to Try:
-        - **Summary**: "What are the main findings or conclusions across all documents?"
-        - **Specific Details**: "What methodology was used in this research?"
-        - **Analysis**: "What are the key recommendations mentioned?"
-        - **Comparison**: "How do the approaches differ between the documents?"
-        - **Technical**: "What are the technical specifications mentioned?"
-        """)
-        
-        # Event handlers
-        def update_language_mode(multilingual_enabled):
-            status = qa_system.set_language_mode(multilingual_enabled)
+            with gr.Column():
+                with gr.Accordion("🎯 Example Questions", open=False):
+                    gr.Markdown("""
+                    • "What are the main findings in these documents?"
+                    • "Compare the methodologies used"
+                    • "What recommendations are mentioned?"
+                    • "Summarize the key conclusions"
+                    """)
             
-            if multilingual_enabled and LANGDETECT_AVAILABLE:
-                # Multilingual mode
-                return (
-                    status,
-                    "### 💬 Ask Questions in Any Language",
-                    "**🌐 Supported Languages:** English, Hindi, Hinglish, Spanish, French, German, Portuguese, Russian, Japanese, Korean, Arabic, Chinese, Italian, Dutch, Turkish",
-                    "Ask a question in any language: 'What is...?' / 'Kya hai...?' / '¿Qué es...?' / 'Was ist...?'",
-                    """### 💡 Multilingual Example Questions:
-                    
-**English:**
-- "What are the main findings across all documents?"
-- "How do the approaches differ between the documents?"
-
-**Hindi:**
-- "सभी दस्तावेजों में मुख्य निष्कर्ष क्या हैं?"
-- "दस्तावेजों के बीच दृष्टिकोण कैसे भिन्न हैं?"
-
-**Hinglish:**
-- "Documents mein kya main findings hai?"
-- "Sabse important recommendations kya hai?"
-- "Kis document mein best analysis hai?"
-
-**Spanish:**
-- "¿Cuáles son los principales hallazgos en todos los documentos?"
-- "¿Cómo difieren los enfoques entre los documentos?"
-
-**French:**
-- "Quelles sont les principales conclusions de tous les documents?"
-- "Comment les approches diffèrent-elles entre les documents?"
-"""
+            with gr.Column():
+                unload_model_btn = gr.Button("🗑️ Unload Model (Free Memory)", variant="secondary")
+                
+                def unload_model():
+                    qa_system.unload_current_model()
+                    return "Model unloaded - GPU memory freed"
+                
+                unload_model_btn.click(
+                    fn=unload_model,
+                    outputs=[model_status]
                 )
-            else:
-                # English-only mode
-                return (
-                    status,
-                    "### 💬 Ask Questions",
-                    "**🇺🇸 English-only mode active** - Optimized for faster English processing",
-                    "Ask a question about the uploaded PDFs...",
-                    """### 💡 Example Questions to Try:
-- **Summary**: "What are the main findings or conclusions across all documents?"
-- **Specific Details**: "What methodology was used in this research?"
-- **Analysis**: "What are the key recommendations mentioned?"
-- **Comparison**: "How do the approaches differ between the documents?"
-- **Technical**: "What are the technical specifications mentioned?"
-"""
-                )
-        
-        language_mode.change(
-            fn=update_language_mode,
-            inputs=[language_mode],
-            outputs=[mode_status, question_section_title, supported_languages, question_input, example_questions]
-        )
-        
-        load_model_btn.click(
-            fn=qa_system.load_model,
-            inputs=[model_dropdown],
-            outputs=[model_status]
-        )
-        
-        process_pdf_btn.click(
-            fn=qa_system.process_multiple_pdfs,
-            inputs=[pdf_upload, chunk_size_slider, chunk_overlap_slider],
-            outputs=[pdf_status]
-        )
-        
-        ask_btn.click(
-            fn=qa_system.answer_question,
-            inputs=[question_input, model_dropdown, max_tokens_slider, num_chunks_slider, temperature_slider],
-            outputs=[answer_output]
-        )
-        
-        def clear_all():
-            qa_system.retriever = None
-            qa_system.vector_store = None
-            qa_system.documents = None
-            qa_system.processed_files = []
-            placeholder = "Ask a question in any language..." if qa_system.multilingual_mode else "Ask a question about the uploaded PDFs..."
-            return "", "No PDF files uploaded", "*The answer will appear here...*", placeholder
-        
-        def unload_model():
-            qa_system.unload_current_model()
-            qa_system.current_model_name = None
-            return "No model loaded"
-        
-        clear_btn.click(
-            fn=clear_all,
-            outputs=[question_input, pdf_status, answer_output, question_input]
-        )
-        
-        # Add model unload button
-        with gr.Row():
-            unload_model_btn = gr.Button("🗑️ Unload Model (Free GPU Memory)", variant="secondary")
-        
-        unload_model_btn.click(
-            fn=unload_model,
-            outputs=[model_status]
-        )
-        
-        def load_examples():
-            if qa_system.multilingual_mode:
-                examples = [
-                    "What are the main topics covered across all documents?",
-                    "सभी दस्तावेजों में मुख्य विषय क्या हैं?",
-                    "Documents mein kya main findings hai?",
-                    "¿Cuáles son los temas principales cubiertos en todos los documentos?",
-                    "Quels sont les principaux sujets couverts dans tous les documents?"
-                ]
-                return examples[0]
-            else:
-                examples = [
-                    "What are the main findings or conclusions across all documents?",
-                    "Can you summarize the key points from all sources?",
-                    "What methodologies are described in the documents?",
-                    "Are there any conflicting viewpoints between the documents?",
-                    "Which document provides the most detailed analysis?"
-                ]
-                return examples[0]
-        
-        example_btn.click(
-            fn=load_examples,
-            outputs=[question_input]
-        )
     
     return interface
 

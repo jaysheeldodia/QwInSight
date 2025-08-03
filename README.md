@@ -290,14 +290,14 @@ pip install faiss-cpu  # or faiss-gpu for GPU support
 - **RAM**: 8GB
 - **Storage**: 10GB free space
 - **CPU**: 4 cores
-- **Python**: 3.8+
+- **Python**: 3.12
 
 #### Recommended Requirements
 - **RAM**: 16GB+
 - **GPU**: 8GB+ VRAM (NVIDIA)
 - **Storage**: 20GB+ free space
 - **CPU**: 8+ cores
-- **Python**: 3.9+
+- **Python**: 3.12
 
 ## 📈 Key Findings & Research Insights
 
