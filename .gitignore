@@ -154,6 +154,8 @@ sample_pdfs
 
 # Rope project settings
 .ropeproject
+*.json
+*.pkl
 
 # mkdocs documentation
 /site
@@ -171,6 +173,8 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+keys/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
@@ -209,3 +213,5 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+dropbox_access_token.txt
+.gitignore
