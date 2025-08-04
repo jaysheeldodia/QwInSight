@@ -351,7 +351,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Multi-language support
 - [x] Batch document processing
 - [x] Advanced query types (summarization, comparison)
-- [ ] Integration with cloud storage (Google Drive, Dropbox)
+- [x] Integration with cloud storage (Google Drive, Dropbox)
 
 ### Version 2.1 (Future)
 - [ ] Multi-modal support (images, tables)
