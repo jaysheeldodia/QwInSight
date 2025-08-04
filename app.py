@@ -443,6 +443,40 @@ class ConfigurablePDFQASystem:
 
         except Exception as e:
             return f"❌ Error generating answer: {str(e)}"
+        
+    def general_answer_question(self, prompt, model_name, max_tokens, temperature):
+        """Answer general-purpose questions not based on any documents"""
+        if self.model is None or self.current_model_name != model_name:
+            return "❌ Please load the model first!"
+
+        if not prompt.strip():
+            return "❌ Please enter a valid prompt!"
+
+        try:
+            messages = [{"role": "user", "content": prompt}]
+            text = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=False
+            )
+            model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
+            generated_ids = self.model.generate(
+                **model_inputs,
+                max_new_tokens=max_tokens,
+                do_sample=True,
+                temperature=temperature,
+                pad_token_id=self.tokenizer.eos_token_id,
+                repetition_penalty=1.1
+            )
+            output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
+            content = self.tokenizer.decode(output_ids, skip_special_tokens=True).strip("\n")
+            return content
+        except Exception as e:
+            return f"❌ Error generating response: {str(e)}"
+
+        
+        
 
 # Initialize the configurable QA system
 qa_system = ConfigurablePDFQASystem()
@@ -543,8 +577,54 @@ def create_interface():
                     inputs=[pdf_upload, chunk_size_slider, chunk_overlap_slider],
                     outputs=[pdf_status]
                 )
+
+            # Tab 3: General Purpose Chat
+            with gr.TabItem("🌐 General Purpose Chat", id="general"):
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        general_prompt = gr.Textbox(
+                            label="Your Question",
+                            placeholder="e.g., What is C++?",
+                            lines=3
+                        )
+
+                        with gr.Row():
+                            general_ask_btn = gr.Button("💬 Ask", variant="primary", size="lg")
+                            general_clear_btn = gr.Button("🧹 Clear", variant="secondary")
+
+                        with gr.Accordion("🎛️ Response Settings", open=False):
+                            general_max_tokens_slider = gr.Slider(
+                                minimum=100, maximum=800, value=400, step=50,
+                                label="Response Length"
+                            )
+                            general_temperature_slider = gr.Slider(
+                                minimum=0.1, maximum=1.0, value=0.7, step=0.1,
+                                label="Creativity"
+                            )
+
+                    with gr.Column(scale=3):
+                        general_answer_output = gr.Markdown(
+                            value="*Your answer will appear here...*",
+                            label="Answer"
+                        )
+
+                # Event handlers for general-purpose tab
+                general_ask_btn.click(
+                    fn=qa_system.general_answer_question,
+                    inputs=[general_prompt, model_dropdown, general_max_tokens_slider, general_temperature_slider],
+                    outputs=[general_answer_output]
+                )
+
+                def clear_general():
+                    return "", "*Your answer will appear here...*"
+
+                general_clear_btn.click(
+                    fn=clear_general,
+                    outputs=[general_prompt, general_answer_output]
+                )
+
             
-            # Tab 3: Q&A (Main interaction)
+            # Tab 4: Q&A (Main interaction)
             with gr.TabItem("💬 Ask Questions", id="qa"):
                 with gr.Row():
                     with gr.Column(scale=2):
