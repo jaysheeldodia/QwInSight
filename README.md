@@ -50,7 +50,6 @@ graph TD
     J --> K[Source Attribution]
 ```
 
-![RAG Architecture](screenshots/rag_architecture.png)
 *Retrieval-Augmented Generation workflow diagram*
 
 ## 📦 Installation
@@ -351,17 +350,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Version 2.0 (Planned)
 - [x] Multi-language support
 - [x] Batch document processing
-- [ ] Advanced query types (summarization, comparison)
+- [x] Advanced query types (summarization, comparison)
 - [ ] Integration with cloud storage (Google Drive, Dropbox)
-- [ ] REST API endpoints
-- [ ] Docker containerization
-- [ ] Performance monitoring dashboard
 
 ### Version 2.1 (Future)
 - [ ] Multi-modal support (images, tables)
-- [ ] Real-time collaborative features
-- [ ] Advanced analytics and insights
-- [ ] Custom model fine-tuning interface
 
 ---
 
